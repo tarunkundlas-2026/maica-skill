@@ -163,6 +163,56 @@ Rules:
 
 ---
 
+## Safety Override — Redirect All Calls to a Single Test Number
+
+Sometimes the user wants to build a real candidate list (e.g. scraped restaurants, leads, candidates) but does **not** want any real-world number actually dialled yet — only a single designated test number should ring, exactly once, no matter how many contacts are in the list.
+
+Trigger phrases: "don't call the real numbers", "just use this number to test", "only call X, skip the rest", "place the call on \<number\> instead".
+
+When this override is requested:
+
+1. **Build the full candidate list as normal** from the source data (name, original phone number, and any other fields needed for dynamic variables).
+2. **Do not submit the real candidates to `submit_batch_calls`.** None of the original phone numbers should ever be dialled.
+3. **Submit exactly one candidate** to `submit_batch_calls`, using the override/test number provided by the user as `phone_number`. This produces exactly one call in the batch, regardless of how many contacts were on the original list.
+4. Keep a mapping in memory (for this task only, not persistent memory) between the original contact list and the fact that they were all skipped, plus the single test call that was actually placed.
+5. Confirm to the user, before submitting, which number will actually be dialled and that all other numbers are being skipped.
+
+This override is a one-time instruction for the current task, not a permanent change to how the skill dials numbers — always re-confirm with the user for future batches unless they say otherwise.
+
+---
+
+## Exporting Results to Google Sheets
+
+When the user wants extracted contact/restaurant data and call results saved to a Google Sheet, use this generic column and mapping scheme (works whether every contact was actually called, or the safety override above skipped all but one):
+
+**Columns:**
+- `Name` — restaurant/contact name from the source data
+- `Phone Number` — the original phone number from the source data
+- `Call Status` — one of: `Skipped`, `Called`, `Failed`, `Pending`
+- `Summary` — the AI-generated call summary, populated only for rows that were actually called
+
+**Row population rules:**
+1. Add one row per original contact from the source list.
+2. For any contact whose number was **not** submitted to `submit_batch_calls` (e.g. skipped under the safety override), set `Call Status = Skipped` and leave `Summary` blank.
+3. For the contact(s) that were actually dialled, fetch `get_batch_call_status` with `include_summary: true` and read the `batch_summary` array. Match each summary entry to the correct row by its `dynamicVariables._recipientPhoneNumber` field (e.g. `+917717230001`), then:
+   - Set `Call Status = Called`
+   - Set `Summary` to that entry's `summary` field
+4. If the safety override was used and the test number does not correspond to any real contact in the source list, add one extra row (e.g. named `Test Call` or as the user labels it) with the test number and its matched summary, instead of forcing it onto an unrelated restaurant's row.
+
+Example `batch_summary` entry and its mapping:
+```json
+{
+  "dynamicVariables": {
+    "candidate_name": "Rajan",
+    "_recipientPhoneNumber": "+917717230001"
+  },
+  "summary": "The user initiated the conversation by inquiring about fees..."
+}
+```
+→ Find the sheet row whose `Phone Number` matches `+917717230001` (or the dedicated test row), set `Call Status = Called`, and write the `summary` text into that row's `Summary` column.
+
+---
+
 ## Example Use Cases
 
 These examples show how to trigger a batch calling campaign from a Telegram message or chat.
