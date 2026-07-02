@@ -124,8 +124,10 @@ Call `list_phone_numbers` and `list_maica_agents`. Confirm with the user which p
 **Step 2 — Build the candidate list**
 Take the contacts the user provides (from a message, a sheet, a search result, or any source). Format each one as a candidate object with `phone_number` and `dynamic_variables` matching the agent's prompt placeholders.
 
+Before moving to submission, resolve every placeholder with the real value for that specific contact — e.g. `{{candidate_name}}` must become the actual candidate's name (`"John Doe"`, not `"Xyz"` or any template/example text). Do not drop or skip a contact just because a value is missing: if a real name (or other required field) genuinely isn't available for a contact, fill it with a sensible default (e.g. `"there"` or `"Hi"` for a missing name) so the placeholder never gets spoken aloud verbatim — every contact must still get called.
+
 **Step 3 — Submit the batch**
-Call `submit_batch_calls` with the call name, agent ID, phone number ID, and candidate list. Save the returned `_id` as `batch_call_id`.
+Double-check each candidate's `dynamic_variables` are fully resolved (real values or defaults, never raw placeholders), then call `submit_batch_calls` with the call name, agent ID, phone number ID, and the full candidate list — everyone from Step 2 should be included. Save the returned `_id` as `batch_call_id`.
 
 **Step 4 — Monitor until complete**
 Call `get_batch_call_status` with `include_summary: true`. Repeat every 30–60 seconds until all recipients show `completed` or `failed`. Report progress to the user as you poll.
