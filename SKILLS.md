@@ -112,6 +112,9 @@ Recipient statuses:
 - `completed` — call finished
 - `failed` — could not connect (busy, no answer, invalid number)
 
+Batch-level status (the numeric `status` field on the response, not the per-recipient status above):
+- `4`, `5`, or `6` — the batch has reached a terminal state; no further recipients will change status. Treat any of these as the signal to stop polling.
+
 ---
 
 ## Workflow
@@ -129,11 +132,15 @@ Before moving to submission, resolve every placeholder with the real value for t
 **Step 3 — Submit the batch**
 Double-check each candidate's `dynamic_variables` are fully resolved (real values or defaults, never raw placeholders), then call `submit_batch_calls` with the call name, agent ID, phone number ID, and the full candidate list — everyone from Step 2 should be included. Save the returned `_id` as `batch_call_id`.
 
-**Step 4 — Monitor until complete**
-Call `get_batch_call_status` with `include_summary: true`. Repeat every 30–60 seconds until all recipients show `completed` or `failed`. Report progress to the user as you poll.
+**Step 4 — Monitor and update the sheet as calls complete**
+Call `get_batch_call_status` with `include_summary: true` exactly every 3 minutes, for up to 15 minutes total (5 poll attempts). On each poll, check `batch_summary` for any recipient that has newly moved to `completed` or `failed` since the last poll. For each one, take the `summary` field from that recipient's object inside `batch_summary` — this is the actual text to write — and immediately write it into the `Summary` column of the corresponding Google Sheet row. Do not wait until the very end to write everything at once. Report progress to the user as you poll.
+
+If, on any poll, the batch-level `status` comes back as `4`, `5`, or `6`, treat the batch as finished immediately: stop polling right away (even if the 15-minute window hasn't elapsed yet), and do one final read of `batch_summary` to update the sheet with every remaining recipient's result before ending the job.
+
+If the 15-minute window elapses without the batch-level `status` reaching `4`, `5`, or `6`, stop polling, note any recipients still not `completed` or `failed` as still pending/in-progress in the sheet, and let the user know a batch is still running with the `batch_call_id` so it can be checked again later.
 
 **Step 5 — Return results**
-Present the AI-generated summary for each contact. If the user wants results saved to a Google Sheet or sent to Telegram, do that now using the summaries from `batch_summary`.
+Present the AI-generated summary for each contact. If any results still need to be saved to a Google Sheet or sent to Telegram (e.g. because Step 4's per-call updates couldn't reach the sheet), do that now using the summaries from `batch_summary`.
 
 ---
 
